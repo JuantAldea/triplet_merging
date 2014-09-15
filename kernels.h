@@ -1,11 +1,11 @@
 #pragma once
 
 #include <iostream>
-#include <mutex>
+#include <cmath>
 using namespace std;
-
-void vector_init(int * const __restrict vector,
-                 const int value,
+template<typename T>
+void vector_init(T * const __restrict vector,
+                 const T value,
                  const int len,
                  const int gid)
 {
@@ -87,9 +87,9 @@ void connectivity_count_tight(const int * const __restrict hitsBasisH1,
                               const int * const __restrict hitsBasisH2,
                               const int * const __restrict hitsFollowersH0,
                               const int * const __restrict hitsFollowersH1,
-                              const int * const __restrict hitLayer,
-                              const int * const __restrict layerOffsets,
-                              const int nSeedingLayers,
+ //                             const int * const __restrict hitLayer,
+ //                             const int * const __restrict layerOffsets,
+ //                             const int nSeedingLayers,
                               const int nTriplets,
                               int * const __restrict connectivityCount,
                               int * const __restrict connectivityOracle,
@@ -102,7 +102,7 @@ void connectivity_count_tight(const int * const __restrict hitsBasisH1,
     const int tripletIndex = gid;
     const int hitIndexInner = hitsBasisH1[tripletIndex];
     const int hitIndexOuter = hitsBasisH2[tripletIndex];
-    const int tripletInnerHitLayer = hitLayer[hitIndexInner];
+//    const int tripletInnerHitLayer = hitLayer[hitIndexInner];
 
     /*
     int myLayerIndex = 0;
@@ -112,13 +112,13 @@ void connectivity_count_tight(const int * const __restrict hitsBasisH1,
 
     myLayerIndex += (nSeedingLayers - 1) * (layerOffsets[nSeedingLayers- 1] <= hitIndex);
     */
-
+/*
     int compatibleLayerOffsetIndex = 0;
     for (int i = 1; i < nSeedingLayers; i++) {
         compatibleLayerOffsetIndex +=
             i * (tripletInnerHitLayer == hitLayer[layerOffsets[i]]);// * (myLayerIndex < i);
     }
-
+*/
     /*
     const int searchOffsetBegin = layerOffsets[compatibleLayerOffsetIndex];
     const bool compatibleLayerIsLastLayer = (compatibleLayerOffsetIndex + 1) == nSeedingLayers;
@@ -131,10 +131,6 @@ void connectivity_count_tight(const int * const __restrict hitsBasisH1,
     //for (int i = searchOffsetBegin; i < searchOffsetEnd; i++) {
     for (int i = 0; i < nTriplets; i++) {
         const bool test = (hitIndexInner == hitsFollowersH0[i]) * (hitIndexOuter == hitsFollowersH1[i]);
-        if (gid == nTriplets - 1) {
-
-            //    cout << i <<  " ultimo " << test <<  ' ' << connectivityCountLocal << endl;
-        }
         connectivityCountLocal += test;
         connectivityOracle[i] |= test;
     }
@@ -188,7 +184,7 @@ void make_triplet_pairs_tigh_connectivity(
 void prefix_sum(const int * const __restrict array,
                 const int array_len,
                 int * const __restrict output,
-                int * const total)
+                int * const __restrict total)
 {
     output[0] = 0;
     for (int i = 0 ; i < array_len - 1; i++) {
@@ -210,5 +206,87 @@ void stream_compaction(const int * const __restrict predicate,
         }
     }
     output_size = output_index;
+}
+
+template<typename T>
+struct vector3 {
+    vector3(const T ox, const T oy, const T oz)
+    {
+        this->x = ox;
+        this->y = oy;
+        this->z = oz;
+    }
+    T x;
+    T y;
+    T z;
+};
+
+template<typename T>
+struct vector2 {
+    vector2(const T ox, const T oy)
+    {
+        this->x = ox;
+        this->y = oy;
+    }
+
+    T x;
+    T y;
+};
+
+void circle_fit(const double * const __restrict hitX,
+                const double * const __restrict hitY,
+                const double * const __restrict hitZ,
+                const int * const __restrict h0,
+                const int * const __restrict h1,
+                const int * const __restrict h2,
+                const int * const __restrict connectable_triplets_indices,
+                const int n_connectable_triplets,
+                double * const __restrict triplet_pt,
+                double * const __restrict triplet_eta,
+                const int gid)
+{
+    if (gid >= n_connectable_triplets) {
+        return;
+    }
+
+    const int triplet_index = connectable_triplets_indices[gid];
+    const int innerHit = h0[triplet_index];
+    const int middleHit = h1[triplet_index];
+    const int outerHit = h2[triplet_index];
+    //some room for opencl vector operations: dot, substraction...
+    const vector3<double> hit0(hitX[innerHit], hitY[innerHit], hitZ[innerHit]);
+    const vector3<double> hit1(hitX[middleHit], hitY[middleHit], hitZ[middleHit]);
+    const vector3<double> hit2(hitX[outerHit], hitY[outerHit], hitZ[outerHit]);
+
+    //calculate Pt
+    const vector3<double> pP0(hit0.x, hit0.y, hit0.x * hit0.x + hit0.y * hit0.y);
+    const vector3<double> pP1(hit1.x, hit1.y, hit1.x * hit1.x + hit1.y * hit1.y);
+    const vector3<double> pP2(hit2.x, hit2.y, hit2.x * hit2.x + hit2.y * hit2.y);
+
+    const vector3<double> a(pP1.x - pP0.x, pP1.y - pP0.y, pP1.z - pP0.z);
+    const vector3<double> b(pP2.x - pP0.x, pP2.y - pP0.y, pP2.z - pP0.z);
+
+    const vector3<double> n(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+    const double n_module = sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+    const vector3<double> unit_n(n.x / n_module, n.y / n_module, n.z / n_module);
+    const vector2<double> circle_center(-unit_n.x / (2 * unit_n.z), -unit_n.y / (2 * unit_n.z));
+    const double c = -(unit_n.x * pP0.x + unit_n.y * pP0.y + unit_n.z * pP0.z);
+    const double circle_radius = sqrt((1 - unit_n.z * unit_n.z - 4 * c * unit_n.z) / (4 * unit_n.z * unit_n.z));
+
+    // Ideal Magnetic Field [T] (-0,-0, 3.8112)
+    const double BZ = 3.8112;
+    // e = 1.602177×10^-19 C (coulombs)
+    const double Q = 1.602177E-19;
+    // c = 2.998×10^8 m/s (meters per second)
+    //const double C = 2.998E8;
+    // 1 GeV/c = 5.344286×10^-19 J s/m (joule seconds per meter)
+    const double GEV_C = 5.344286E-19;
+
+    triplet_pt[triplet_index] = Q * BZ * (circle_radius * 1E-2) / GEV_C;
+
+    // calculate eta
+    const vector3<double> p(hit2.x - hit0.x, hit2.y - hit0.y, hit2.z - hit0.z);
+    const double t = p.z / sqrt(p.x * p.x + p.y * p.y);
+    triplet_eta[triplet_index] = asinh(t);
 }
 

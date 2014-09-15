@@ -1,5 +1,5 @@
 TARGET = thread
-FLAGS = -std=c++11 -g  -Wall -Wextra -O0 -lpthread -lstdc++
+FLAGS = -std=c++11 -g  -Wall -Wextra -O0 -lpthread -lstdc++ -lm
 
 all: gcc
 

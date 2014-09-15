@@ -13,7 +13,10 @@ using namespace std;
 template <typename T>
 void print_array(const T * const __restrict array, const int len, bool pc)
 {
-    cout << "[ ";
+    if (!pc) {
+        cout << "[ ";
+
+    }
     for (int i = 0; i < len; i++) {
         if (!pc) {
             cout << setfill(' ') << setw(2) << array[i];
@@ -26,7 +29,9 @@ void print_array(const T * const __restrict array, const int len, bool pc)
         }
     }
 
-    cout << "] ";
+    if (!pc) {
+        cout << "] ";
+    }
     cout << endl;
 }
 
@@ -73,14 +78,15 @@ void p_call(bool serialize, int totalWork, Args&&... argv)
 
 int main()
 {
-    int layerOffsets[] = {0, 4, 8, 12, 16};
-    const int nSeedingSets = 5;
+    //int layerOffsets[] = {0, 4, 8, 12, 16};
+    //const int nSeedingSets = 5;
 //#define mock
 #ifdef mock
     const int nTriplets = 20;
     int h0[] = {0, 1,  2,  3,  4,  4,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
     int h1[] = {4, 4,  6,  7,  8,  8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
     int h2[] = {8, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
+    /*
     int hitLayer[] = {
         0, 0, 0, 0,
         1, 1, 1, 1,
@@ -90,7 +96,7 @@ int main()
         5, 5, 5, 5,
         8, 8, 8, 8
     };
-
+    */
     for (int i = 0; i < nTriplets; i++) {
         cout << setfill(' ') << setw(2) << i << ' ';
     }
@@ -102,36 +108,32 @@ int main()
     cout << "-----" << endl;
 #else
     int nHits;
-    float *hitsX;
-    float *hitsY;
-    float *hitsZ;
+    double *hitsX;
+    double *hitsY;
+    double *hitsZ;
 
     int nTriplets;
     int *h0;
     int *h1;
     int *h2;
     read_vector3("hits", &nHits, &hitsX, &hitsY, &hitsZ);
-    read_vector3("log_7977", &nTriplets, &h0, &h1, &h2);
+    read_vector3("triplets", &nTriplets, &h0, &h1, &h2);
 
-    //TODO think of filtering the list of triplets leaving only those
-    // with connectivity
-    //double * const tripletsEta = new double[nTriplets];
-    //double * const tripletsPt = new double[nTriplets];
-
-    int hitLayer[] = {0};
+    //int hitLayer[] = {0};
 #endif
     cout << "number of hits " << nHits << endl;
     cout << "number of triplets " << nTriplets << endl;
 
     int *connectivity_count = new int[nTriplets];
     int *connectivity_oracle = new int[nTriplets];
-    p_call(false, nTriplets, vector_init, connectivity_count, 0, nTriplets);
-    p_call(false, nTriplets, vector_init, connectivity_oracle, 0, nTriplets);
-    //forward
+    p_call(false, nTriplets, vector_init<int>, connectivity_count, 0, nTriplets);
+    p_call(false, nTriplets, vector_init<int>, connectivity_oracle, 0, nTriplets);
 
+    //forward
     p_call(true, nTriplets, connectivity_count_tight,
            h1, h2, h0, h1,
-           hitLayer, layerOffsets, nSeedingSets, nTriplets, connectivity_count, connectivity_oracle);
+           //hitLayer, layerOffsets, nSeedingSets,
+           nTriplets, connectivity_count, connectivity_oracle);
     //backward
     //p_call(true, nTriplets, connectivity_count_tight, h0, h1, h1, h2,
     //       hitLayer, layerOffsets, nSeedingSets, nTriplets, connectivity_count);
@@ -163,7 +165,7 @@ int main()
            connectivity_prefixsum, triplet_pairs_base, nTriplets, total_combinations);
 
     int *triplet_pairs_follower = new int[total_combinations];
-    //p_call(false, total_combinations, vector_init, triplet_pairs_follower, 0, total_combinations);
+    //p_call(false, total_combinations, vector_init<int>, triplet_pairs_follower, 0, total_combinations);
     p_call(false, nConnectables,
            make_triplet_pairs_tigh_connectivity,
            connectable_triplet_indices, connectivity_prefixsum, h1, h2, h0, h1,
@@ -175,10 +177,27 @@ int main()
     }
 #endif
 
-#ifdef not_implemented
+    double * const triplets_eta = new double[nTriplets];
+    double * const triplets_pt = new double[nTriplets];
+
+    //init to -1 just for printing purposes
+    p_call(false, nTriplets, vector_init<double>, triplets_eta, -1, nTriplets);
+    p_call(false, nTriplets, vector_init<double>, triplets_pt, -1, nTriplets);
+
     p_call(false, nConnectables,
            circle_fit,
-           connectable_triplet_indices, nConnectables, h0, h1, h2, triplet_pt, triplet_eta);
+           hitsX, hitsY, hitsZ,
+           h0, h1, h2,
+           connectable_triplet_indices, nConnectables,
+           triplets_pt, triplets_eta);
+
+    cout << "triplets_pt:" << endl;
+    //print_array(triplets_pt, nTriplets, true);
+
+    cout << "triplets_eta:" << endl;
+    //print_array(triplets_eta, nTriplets, true);
+
+#ifdef not_implemented
     // count the final amount of compatible triplets
     p_call(false, total_combinations,
            compatible_triplet_test_count,
@@ -204,26 +223,6 @@ int main()
            ca - automaton
            connectable_triplet_indices, nConnectables
 #endif
-           /*
-               int kf_result[total_combinations] = {0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1};
-               int kf_result_prefix_sum[total_combinations];
-               int total_combinations_kf;
-               prefix_sum(kf_result, total_combinations, kf_result_prefix_sum, &total_combinations_kf);
-               print_array(connectivity_prefixsum, total_combinations_kf, false);
-               cout << "total_combinations_kf " << total_combinations_kf << endl;
-
-               int *after_kf_filter = new int [total_combinations_kf];
-
-               stream_compaction(kf_result, total_combinations, after_kf_filter, total_combinations_kf);
-               print_array(after_kf_filter, total_combinations_kf, false);
-           */
            return 0;
 }
-
-
-
-
-
-
-
 
