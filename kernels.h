@@ -87,9 +87,9 @@ void connectivity_count_tight(const int * const __restrict hitsBasisH1,
                               const int * const __restrict hitsBasisH2,
                               const int * const __restrict hitsFollowersH0,
                               const int * const __restrict hitsFollowersH1,
- //                             const int * const __restrict hitLayer,
- //                             const int * const __restrict layerOffsets,
- //                             const int nSeedingLayers,
+//                             const int * const __restrict hitLayer,
+//                             const int * const __restrict layerOffsets,
+//                             const int nSeedingLayers,
                               const int nTriplets,
                               int * const __restrict connectivityCount,
                               int * const __restrict connectivityOracle,
@@ -112,13 +112,13 @@ void connectivity_count_tight(const int * const __restrict hitsBasisH1,
 
     myLayerIndex += (nSeedingLayers - 1) * (layerOffsets[nSeedingLayers- 1] <= hitIndex);
     */
-/*
-    int compatibleLayerOffsetIndex = 0;
-    for (int i = 1; i < nSeedingLayers; i++) {
-        compatibleLayerOffsetIndex +=
-            i * (tripletInnerHitLayer == hitLayer[layerOffsets[i]]);// * (myLayerIndex < i);
-    }
-*/
+    /*
+        int compatibleLayerOffsetIndex = 0;
+        for (int i = 1; i < nSeedingLayers; i++) {
+            compatibleLayerOffsetIndex +=
+                i * (tripletInnerHitLayer == hitLayer[layerOffsets[i]]);// * (myLayerIndex < i);
+        }
+    */
     /*
     const int searchOffsetBegin = layerOffsets[compatibleLayerOffsetIndex];
     const bool compatibleLayerIsLastLayer = (compatibleLayerOffsetIndex + 1) == nSeedingLayers;
@@ -135,8 +135,8 @@ void connectivity_count_tight(const int * const __restrict hitsBasisH1,
         connectivityOracle[i] |= test;
     }
 
-    connectivityOracle[gid] |= connectivityCountLocal > 0;
     connectivityCount[gid] += connectivityCountLocal;
+    connectivityOracle[gid] |= connectivityCountLocal > 0;
 }
 
 void make_triplet_pairs_tigh_connectivity(
@@ -182,8 +182,8 @@ void make_triplet_pairs_tigh_connectivity(
 
 
 void prefix_sum(const int * const __restrict array,
-                const int array_len,
                 int * const __restrict output,
+                const int array_len,
                 int * const __restrict total)
 {
     output[0] = 0;
@@ -193,19 +193,35 @@ void prefix_sum(const int * const __restrict array,
     *total = output[array_len - 1] + array[array_len - 1];
 }
 
-void stream_compaction(const int * const __restrict predicate,
+void stream_compaction(const int * const __restrict stream,
+                       const int * const __restrict predicate,
+                       const int * const __restrict store_offsets,
                        const int  input_length,
                        int * __restrict output,
-                       int &output_size)
+                       const int gid)
 {
-    int output_index = 0;
-    for (int i = 0; i < input_length; i++) {
-        if (predicate[i] > 0) {
-            output[output_index] = i;
-            output_index++;
-        }
+    if (gid >= input_length) {
+        return;
     }
-    output_size = output_index;
+
+    if (predicate[gid]) {
+        output[store_offsets[gid]] = stream[gid];
+    }
+}
+
+void predicate_to_valid_index(const int * const __restrict predicate,
+                              const int * const __restrict store_offsets,
+                              int * __restrict output,
+                              const int  input_length,
+                              const int gid)
+{
+    if (gid >= input_length) {
+        return;
+    }
+
+    if (predicate[gid]) {
+        output[store_offsets[gid]] = gid;
+    }
 }
 
 template<typename T>
@@ -262,16 +278,28 @@ void circle_fit(const double * const __restrict hitX,
     const vector3<double> pP0(hit0.x, hit0.y, hit0.x * hit0.x + hit0.y * hit0.y);
     const vector3<double> pP1(hit1.x, hit1.y, hit1.x * hit1.x + hit1.y * hit1.y);
     const vector3<double> pP2(hit2.x, hit2.y, hit2.x * hit2.x + hit2.y * hit2.y);
-
+//#define p
+#ifdef p
+    cout << gid << "->"
+         << triplet_index << ' '
+         << '(' << innerHit << ", " << middleHit << ", " << outerHit << ")" << endl
+         << '\t' << '(' << hitX[innerHit] << ' ' << hitY[innerHit] << ' ' << hitZ[innerHit] << ')' << endl
+         << '\t' << '(' << hitX[middleHit] << ' ' << hitY[middleHit] << ' ' << hitZ[middleHit] << ')' << endl
+         << '\t' << '(' << hitX[outerHit] << ' ' << hitY[outerHit] << ' ' << hitZ[outerHit] << ')' << endl;
+#endif
     const vector3<double> a(pP1.x - pP0.x, pP1.y - pP0.y, pP1.z - pP0.z);
     const vector3<double> b(pP2.x - pP0.x, pP2.y - pP0.y, pP2.z - pP0.z);
+    const vector3<double> n(a.y * b.z - a.z * b.y,
+                            a.z * b.x - a.x * b.z,
+                            a.x * b.y - a.y * b.x);
 
-    const vector3<double> n(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
     const double n_module = sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
     const vector3<double> unit_n(n.x / n_module, n.y / n_module, n.z / n_module);
-    const vector2<double> circle_center(-unit_n.x / (2 * unit_n.z), -unit_n.y / (2 * unit_n.z));
+    const vector2<double> circle_center(-unit_n.x / (2 * unit_n.z),
+                                        -unit_n.y / (2 * unit_n.z));
     const double c = -(unit_n.x * pP0.x + unit_n.y * pP0.y + unit_n.z * pP0.z);
-    const double circle_radius = sqrt((1 - unit_n.z * unit_n.z - 4 * c * unit_n.z) / (4 * unit_n.z * unit_n.z));
+    const double circle_radius =
+        sqrt((1 - unit_n.z * unit_n.z - 4 * c * unit_n.z) / (4 * unit_n.z * unit_n.z));
 
     // Ideal Magnetic Field [T] (-0,-0, 3.8112)
     const double BZ = 3.8112;
@@ -285,8 +313,55 @@ void circle_fit(const double * const __restrict hitX,
     triplet_pt[triplet_index] = Q * BZ * (circle_radius * 1E-2) / GEV_C;
 
     // calculate eta
-    const vector3<double> p(hit2.x - hit0.x, hit2.y - hit0.y, hit2.z - hit0.z);
-    const double t = p.z / sqrt(p.x * p.x + p.y * p.y);
+    const vector3<double> p(hit2.x - hit0.x,
+                            hit2.y - hit0.y,
+                            hit2.z - hit0.z);
+
+    const double t(p.z / sqrt(p.x * p.x + p.y * p.y));
     triplet_eta[triplet_index] = asinh(t);
 }
+
+void compatible_triplet_filter_eta(const int * const __restrict triplet_pair_base,
+                                   const int * const __restrict triplet_pair_follower,
+                                   const int  n_triplet_pairs,
+                                   const double * const __restrict triplet_eta,
+                                   const double dEtaCut,
+                                   int * const __restrict compatible_oracle,
+                                   const int gid)
+{
+    if (gid >= n_triplet_pairs) {
+        return;
+    }
+
+    const int base_index = triplet_pair_base[gid];
+    const int follower_index = triplet_pair_follower[gid];
+    const double base_eta = triplet_eta[base_index];
+    const double follower_eta = triplet_eta[follower_index];
+    compatible_oracle[gid] = fabs(base_eta - follower_eta) <= dEtaCut;
+//#define p
+#ifdef p
+    cout << gid << " (" << base_index << " " << follower_index << ") "
+         << "dEta = |" << follower_eta << " - " << base_eta << "| = " << fabs(base_eta - follower_eta)
+         << " -> " << (compatible_oracle[gid] ? "true" : "false") << endl;
+#endif
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
