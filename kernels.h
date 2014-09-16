@@ -347,18 +347,40 @@ void compatible_triplet_filter_eta(const int * const __restrict triplet_pair_bas
 }
 
 
+void ca_iteration(const int * const __restrict current_state,
+                  const int * const __restrict base_triplets,
+                  const int * const __restrict follower_triplets,
+                  const int n_triplet_pairs,
+                  int * const  __restrict next_state,
+                  const int gid)
+{
+    if (gid >= n_triplet_pairs) {
+        return;
+    }
+    const int base_index = base_triplets[gid];
+    const int follower_index = follower_triplets[gid];
+    const int base_state = current_state[base_index];
+    const int follower_state = current_state[follower_index];
+    if (base_state == follower_state) {
+        next_state[base_index] = base_state + 1;
+    }
+    //annotate best follower index on each iteration
+    //minimize pt difference and maximize tracklet length
+    //maybe put a barrier here and copy current into next
+    //instead of using another kernel?
+}
 
-
-
-
-
-
-
-
-
-
-
-
+template<typename T>
+void array_copy(const T * const __restrict source,
+                T * const __restrict destination,
+                const int size,
+                const int gid)
+{
+    if (gid >= size){
+        return;
+    }
+    destination[gid] = source[gid];
+}
 
 
 

@@ -133,19 +133,12 @@ int main()
 
     //print_array(connectable_triplet_indices, total_connectable_triplets, true);
     cout << "connectable triplets " << total_connectable_triplets << endl;
-    
+
     int *connectivity_prefixsum = new int[nTriplets];
     int total_combinations;
     prefix_sum(connectivity_count, connectivity_prefixsum, nTriplets, &total_combinations);
     //print_array(connectivity_prefixsum, nTriplets, false);
     cout << "total combinations " << total_combinations << endl;
-    /*
-     cout << "stream filter" << endl;
-     print_array(connectivity_count, nTriplets, false);
-     int *connectable_triplet_indices = new int[total_combinations];
-     stream_compaction(connectivity_count, nTriplets, connectable_triplet_indices, total_combinations);
-     //print_array(connectable_triplet_indices, total_combinations);
-    */
 
     int *triplet_pairs_base = new int[total_combinations];
     p_call(false, total_combinations,
@@ -193,6 +186,7 @@ int main()
            triplets_eta,
            (double)0.0256,
            compatible_triplet_oracle);
+
     //print_array(compatible_triplet_oracle, total_combinations, true);
     int * const compatible_triplet_prefix_sum = new int[total_combinations];
     int compatible_triplet_total = 0;
@@ -219,16 +213,45 @@ int main()
            compatible_triplet_prefix_sum,
            total_combinations,
            compatible_triplets_follower);
-#define p
+
+//#define p
 #ifdef p
     for (int i = 0; i < compatible_triplet_total; i++) {
         std::cout << i << ' ' << compatible_triplets_base[i] << ' ' << compatible_triplets_follower[i] << endl;
     }
 #endif
 
+    int *cell_status_current = new int [nTriplets];
+    int *cell_status_next = new int [nTriplets];
+    p_call(false, nTriplets,
+           vector_init<int>,
+           cell_status_current, 1, nTriplets);
+
+    p_call(false, nTriplets,
+           vector_init<int>,
+           cell_status_next, 1, nTriplets);
+
+    for (int i = 0; i < 6; i++) {
+        p_call(false, compatible_triplet_total,
+               ca_iteration,
+               cell_status_current,
+               compatible_triplets_base,
+               compatible_triplets_follower,
+               compatible_triplet_total,
+               cell_status_next);
+    
+        if (i == 3) {
+            cout << "CA ITER-" << i << endl;
+            print_array(cell_status_next, nTriplets, true);
+        }
+        p_call(false, nTriplets,
+               array_copy<int>,
+               cell_status_next, cell_status_current,
+               nTriplets);
+
+    }
+
 #ifdef not_implemented
-
-
     // start the CA
     p_call(false, total_connectable_triplets,
            ca - automaton
@@ -236,10 +259,6 @@ int main()
 #endif
            return 0;
 }
-
-
-
-
 
 
 
